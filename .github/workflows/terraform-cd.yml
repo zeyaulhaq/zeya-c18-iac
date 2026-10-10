@@ -1,0 +1,51 @@
+name: Terraform CD
+
+# Manual trigger: Actions tab -> Terraform CD -> Run workflow -> pick apply/destroy
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action to run"
+        type: choice
+        options:
+          - apply
+          - destroy
+        default: apply
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform-cd:
+    name: terraform-${{ inputs.action }}
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'   # only ever deploy what is on main
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_IAC_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        if: inputs.action == 'apply'
+        run: terraform apply -auto-approve -input=false
+
+      - name: Terraform destroy
+        if: inputs.action == 'destroy'
+        run: terraform destroy -auto-approve -input=false
+
+      - name: Show outputs (copy these into the app repo variables)
+        if: inputs.action == 'apply'
+        run: terraform output
